@@ -3639,6 +3639,46 @@ export { value as renamed };
     });
 });
 
+describe("Program - emit", () => {
+    test("returns emitted outputs to the client instead of writing to disk", async () => {
+        const api = spawnAPI({
+            "/tsconfig.json": JSON.stringify({ compilerOptions: { strict: true, declaration: true } }),
+            "/src/index.ts": `export const answer: number = 42;\n`,
+        });
+        try {
+            const snapshot = await api.updateSnapshot({ openProject: "/tsconfig.json" });
+            const project = snapshot.getProject("/tsconfig.json")!;
+            const result = await project.program.emit();
+            assert.equal(result.emitSkipped, false);
+            const names = result.files.map(f => f.fileName).sort();
+            assert.deepEqual(names, ["/src/index.d.ts", "/src/index.js"]);
+            const js = result.files.find(f => f.fileName.endsWith(".js"))!;
+            assert.ok(js.text.includes("42"), "emitted JS should contain the initializer");
+            const dts = result.files.find(f => f.fileName.endsWith(".d.ts"))!;
+            assert.ok(dts.text.includes("answer"), "emitted d.ts should contain the declaration");
+        }
+        finally {
+            await api.close();
+        }
+    });
+
+    test("dtsOnly emits only declaration outputs", async () => {
+        const api = spawnAPI({
+            "/tsconfig.json": JSON.stringify({ compilerOptions: { strict: true, declaration: true } }),
+            "/src/index.ts": `export const answer: number = 42;\n`,
+        });
+        try {
+            const snapshot = await api.updateSnapshot({ openProject: "/tsconfig.json" });
+            const project = snapshot.getProject("/tsconfig.json")!;
+            const result = await project.program.emit({ dtsOnly: true });
+            assert.deepEqual(result.files.map(f => f.fileName), ["/src/index.d.ts"]);
+        }
+        finally {
+            await api.close();
+        }
+    });
+});
+
 describe("Checker - getAliasedSymbol", () => {
     test("resolves an import alias to its target symbol", async () => {
         const api = spawnAPI({

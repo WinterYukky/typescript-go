@@ -685,6 +685,24 @@ export class Project {
     }
 }
 
+export interface EmitOptions {
+    /** Emit only this file (defaults to the whole project). */
+    file?: DocumentIdentifier;
+    /** Emit only declaration outputs. */
+    dtsOnly?: boolean;
+}
+
+export interface EmittedFile {
+    fileName: string;
+    text: string;
+}
+
+export interface EmitResult {
+    emitSkipped: boolean;
+    diagnostics: readonly Diagnostic[];
+    files: readonly EmittedFile[];
+}
+
 export class Program {
     private snapshotId: number;
     private project: Project;
@@ -898,6 +916,21 @@ export class Program {
             project: this.project.id,
         });
         return data ?? [];
+    }
+
+    /**
+     * Run the compiler emit for this project (or a single file). The emitted
+     * outputs are returned to the caller instead of being written to disk, so
+     * consumers can post-process them (e.g. inject metadata) before persisting.
+     */
+    emit(options?: EmitOptions): EmitResult {
+        const data = this.client.apiRequest<EmitResult>("emit", {
+            snapshot: this.snapshotId,
+            project: this.project.id,
+            file: options?.file,
+            dtsOnly: options?.dtsOnly,
+        });
+        return { emitSkipped: data.emitSkipped, diagnostics: data.diagnostics ?? [], files: data.files ?? [] };
     }
 }
 

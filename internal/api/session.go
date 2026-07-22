@@ -798,6 +798,8 @@ func (s *Session) HandleRequest(ctx context.Context, method string, params json.
 		return s.handleGetGlobalDiagnostics(ctx, parsed.(*GetProjectDiagnosticsParams))
 	case string(MethodGetConfigFileParsingDiagnostics):
 		return s.handleGetConfigFileParsingDiagnostics(ctx, parsed.(*GetProjectDiagnosticsParams))
+	case string(MethodEmit):
+		return s.handleEmit(ctx, parsed.(*EmitParams))
 	case string(MethodStartCPUProfile):
 		return s.handleStartCPUProfile(ctx, parsed.(*ProfileParams))
 	case string(MethodStopCPUProfile):
@@ -3114,6 +3116,54 @@ func (s *Session) handleGetBindDiagnostics(ctx context.Context, params *GetDiagn
 
 	diags := program.GetBindDiagnostics(ctx, sourceFile)
 	return NewDiagnosticResponses(diags), nil
+}
+
+// handleEmit runs the compiler emit for a project (or a single file) and
+// returns the emitted outputs to the client instead of writing them to disk.
+// This gives out-of-process API consumers a way to post-process emit outputs
+// (for example, injecting runtime metadata) before writing them.
+func (s *Session) handleEmit(ctx context.Context, params *EmitParams) (*EmitResponse, error) {
+	sd, err := s.getSnapshotData(params.Snapshot)
+	if err != nil {
+		return nil, err
+	}
+
+	program, err := sd.getProgram(params.Project)
+	if err != nil {
+		return nil, err
+	}
+
+	sourceFile, err := s.resolveOptionalSourceFile(program, params.File)
+	if err != nil {
+		return nil, err
+	}
+
+	emitOnly := compiler.EmitAll
+	if params.DtsOnly {
+		emitOnly = compiler.EmitOnlyDts
+	}
+
+	var mu sync.Mutex
+	var files []*EmittedFileResponse
+	result := program.Emit(ctx, compiler.EmitOptions{
+		TargetSourceFile: sourceFile,
+		EmitOnly:         emitOnly,
+		WriteFile: func(fileName string, text string, data *compiler.WriteFileData) error {
+			mu.Lock()
+			defer mu.Unlock()
+			files = append(files, &EmittedFileResponse{FileName: fileName, Text: text})
+			return nil
+		},
+	})
+	if result == nil {
+		return &EmitResponse{EmitSkipped: true}, nil
+	}
+
+	return &EmitResponse{
+		EmitSkipped: result.EmitSkipped,
+		Diagnostics: NewDiagnosticResponses(result.Diagnostics),
+		Files:       files,
+	}, nil
 }
 
 // handleGetSemanticDiagnostics returns semantic diagnostics for a file or all files.
