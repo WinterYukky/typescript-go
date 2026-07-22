@@ -181,6 +181,7 @@ const (
 	MethodGetProgramDiagnostics           Method = "getProgramDiagnostics"
 	MethodGetGlobalDiagnostics            Method = "getGlobalDiagnostics"
 	MethodGetConfigFileParsingDiagnostics Method = "getConfigFileParsingDiagnostics"
+	MethodEmit                            Method = "emit"
 
 	// Emitter methods
 	MethodPrintNode Method = "printNode"
@@ -496,6 +497,7 @@ var unmarshalers = map[Method]func([]byte) (any, error){
 	MethodGetProgramDiagnostics:             unmarshallerFor[GetProjectDiagnosticsParams],
 	MethodGetGlobalDiagnostics:              unmarshallerFor[GetProjectDiagnosticsParams],
 	MethodGetConfigFileParsingDiagnostics:   unmarshallerFor[GetProjectDiagnosticsParams],
+	MethodEmit:                              unmarshallerFor[EmitParams],
 	MethodStartCPUProfile:                   unmarshallerFor[ProfileParams],
 	MethodStopCPUProfile:                    noParams,
 	MethodSaveHeapProfile:                   unmarshallerFor[ProfileParams],
@@ -1166,6 +1168,29 @@ type GetDiagnosticsParams struct {
 	Snapshot SnapshotID          `json:"snapshot"`
 	Project  ProjectID           `json:"project"`
 	File     *DocumentIdentifier `json:"file,omitempty"`
+}
+
+// EmitParams is the request for the "emit" method.
+type EmitParams struct {
+	Snapshot SnapshotID          `json:"snapshot"`
+	Project  ProjectID           `json:"project"`
+	File     *DocumentIdentifier `json:"file,omitempty"`
+	DtsOnly  bool                `json:"dtsOnly,omitempty"`
+}
+
+// EmittedFileResponse is a single emit output returned to the client.
+type EmittedFileResponse struct {
+	FileName string `json:"fileName"`
+	Text     string `json:"text"`
+}
+
+// EmitResponse is the API response for the "emit" method. Outputs are returned
+// to the client instead of being written to disk, so API consumers can
+// post-process emit outputs (e.g. inject metadata) before persisting them.
+type EmitResponse struct {
+	EmitSkipped bool                   `json:"emitSkipped"`
+	Diagnostics []*DiagnosticResponse  `json:"diagnostics"`
+	Files       []*EmittedFileResponse `json:"files"`
 }
 
 // GetProjectDiagnosticsParams are parameters for project-wide diagnostic methods.
