@@ -798,8 +798,8 @@ func (s *Session) HandleRequest(ctx context.Context, method string, params json.
 		return s.handleGetGlobalDiagnostics(ctx, parsed.(*GetProjectDiagnosticsParams))
 	case string(MethodGetConfigFileParsingDiagnostics):
 		return s.handleGetConfigFileParsingDiagnostics(ctx, parsed.(*GetProjectDiagnosticsParams))
-	case string(MethodEmit):
-		return s.handleEmit(ctx, parsed.(*EmitParams))
+	case string(MethodGetEmitOutput):
+		return s.handleGetEmitOutput(ctx, parsed.(*GetEmitOutputParams))
 	case string(MethodStartCPUProfile):
 		return s.handleStartCPUProfile(ctx, parsed.(*ProfileParams))
 	case string(MethodStopCPUProfile):
@@ -3118,11 +3118,12 @@ func (s *Session) handleGetBindDiagnostics(ctx context.Context, params *GetDiagn
 	return NewDiagnosticResponses(diags), nil
 }
 
-// handleEmit runs the compiler emit for a project (or a single file) and
-// returns the emitted outputs to the client instead of writing them to disk.
-// This gives out-of-process API consumers a way to post-process emit outputs
-// (for example, injecting runtime metadata) before writing them.
-func (s *Session) handleEmit(ctx context.Context, params *EmitParams) (*EmitResponse, error) {
+// handleGetEmitOutput runs the compiler emit for a project (or a single file)
+// and returns the emitted outputs to the client instead of writing them to
+// disk, mirroring the classic compiler's EmitOutput. This gives out-of-process
+// API consumers a way to post-process emit outputs (for example, injecting
+// runtime metadata) before writing them.
+func (s *Session) handleGetEmitOutput(ctx context.Context, params *GetEmitOutputParams) (*EmitOutputResponse, error) {
 	sd, err := s.getSnapshotData(params.Snapshot)
 	if err != nil {
 		return nil, err
@@ -3139,30 +3140,30 @@ func (s *Session) handleEmit(ctx context.Context, params *EmitParams) (*EmitResp
 	}
 
 	emitOnly := compiler.EmitAll
-	if params.DtsOnly {
+	if params.EmitOnlyDtsFiles {
 		emitOnly = compiler.EmitOnlyDts
 	}
 
 	var mu sync.Mutex
-	var files []*EmittedFileResponse
+	var outputFiles []*OutputFileResponse
 	result := program.Emit(ctx, compiler.EmitOptions{
 		TargetSourceFile: sourceFile,
 		EmitOnly:         emitOnly,
 		WriteFile: func(fileName string, text string, data *compiler.WriteFileData) error {
 			mu.Lock()
 			defer mu.Unlock()
-			files = append(files, &EmittedFileResponse{FileName: fileName, Text: text})
+			outputFiles = append(outputFiles, &OutputFileResponse{Name: fileName, Text: text})
 			return nil
 		},
 	})
 	if result == nil {
-		return &EmitResponse{EmitSkipped: true}, nil
+		return &EmitOutputResponse{EmitSkipped: true}, nil
 	}
 
-	return &EmitResponse{
+	return &EmitOutputResponse{
+		OutputFiles: outputFiles,
 		EmitSkipped: result.EmitSkipped,
 		Diagnostics: NewDiagnosticResponses(result.Diagnostics),
-		Files:       files,
 	}, nil
 }
 

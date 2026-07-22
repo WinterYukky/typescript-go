@@ -3639,7 +3639,7 @@ export { value as renamed };
     });
 });
 
-describe("Program - emit", () => {
+describe("Program - getEmitOutput", () => {
     test("returns emitted outputs to the client instead of writing to disk", async () => {
         const api = spawnAPI({
             "/tsconfig.json": JSON.stringify({ compilerOptions: { strict: true, declaration: true } }),
@@ -3648,13 +3648,13 @@ describe("Program - emit", () => {
         try {
             const snapshot = await api.updateSnapshot({ openProject: "/tsconfig.json" });
             const project = snapshot.getProject("/tsconfig.json")!;
-            const result = await project.program.emit();
+            const result = await project.program.getEmitOutput();
             assert.equal(result.emitSkipped, false);
-            const names = result.files.map(f => f.fileName).sort();
+            const names = result.outputFiles.map(f => f.name).sort();
             assert.deepEqual(names, ["/src/index.d.ts", "/src/index.js"]);
-            const js = result.files.find(f => f.fileName.endsWith(".js"))!;
+            const js = result.outputFiles.find(f => f.name.endsWith(".js"))!;
             assert.ok(js.text.includes("42"), "emitted JS should contain the initializer");
-            const dts = result.files.find(f => f.fileName.endsWith(".d.ts"))!;
+            const dts = result.outputFiles.find(f => f.name.endsWith(".d.ts"))!;
             assert.ok(dts.text.includes("answer"), "emitted d.ts should contain the declaration");
         }
         finally {
@@ -3662,7 +3662,7 @@ describe("Program - emit", () => {
         }
     });
 
-    test("dtsOnly emits only declaration outputs", async () => {
+    test("emitOnlyDtsFiles emits only declaration outputs", async () => {
         const api = spawnAPI({
             "/tsconfig.json": JSON.stringify({ compilerOptions: { strict: true, declaration: true } }),
             "/src/index.ts": `export const answer: number = 42;\n`,
@@ -3670,8 +3670,8 @@ describe("Program - emit", () => {
         try {
             const snapshot = await api.updateSnapshot({ openProject: "/tsconfig.json" });
             const project = snapshot.getProject("/tsconfig.json")!;
-            const result = await project.program.emit({ dtsOnly: true });
-            assert.deepEqual(result.files.map(f => f.fileName), ["/src/index.d.ts"]);
+            const result = await project.program.getEmitOutput({ emitOnlyDtsFiles: true });
+            assert.deepEqual(result.outputFiles.map(f => f.name), ["/src/index.d.ts"]);
         }
         finally {
             await api.close();

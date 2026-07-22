@@ -677,22 +677,25 @@ export class Project {
     }
 }
 
-export interface EmitOptions {
+export interface GetEmitOutputOptions {
     /** Emit only this file (defaults to the whole project). */
     file?: DocumentIdentifier;
     /** Emit only declaration outputs. */
-    dtsOnly?: boolean;
+    emitOnlyDtsFiles?: boolean;
 }
 
-export interface EmittedFile {
-    fileName: string;
+/** Mirrors the classic compiler's `OutputFile`. */
+export interface OutputFile {
+    name: string;
     text: string;
+    writeByteOrderMark: boolean;
 }
 
-export interface EmitResult {
+/** Mirrors the classic compiler's `EmitOutput`. */
+export interface EmitOutput {
+    outputFiles: readonly OutputFile[];
     emitSkipped: boolean;
     diagnostics: readonly Diagnostic[];
-    files: readonly EmittedFile[];
 }
 
 export class Program {
@@ -911,18 +914,19 @@ export class Program {
     }
 
     /**
-     * Run the compiler emit for this project (or a single file). The emitted
-     * outputs are returned to the caller instead of being written to disk, so
-     * consumers can post-process them (e.g. inject metadata) before persisting.
+     * Run the compiler emit for this project (or a single file) and return the
+     * outputs to the caller instead of writing them to disk, mirroring the
+     * classic compiler's `getEmitOutput`. Consumers can post-process the
+     * outputs (e.g. inject metadata) before persisting them.
      */
-    async emit(options?: EmitOptions): Promise<EmitResult> {
-        const data = await this.client.apiRequest<EmitResult>("emit", {
+    async getEmitOutput(options?: GetEmitOutputOptions): Promise<EmitOutput> {
+        const data = await this.client.apiRequest<EmitOutput>("getEmitOutput", {
             snapshot: this.snapshotId,
             project: this.project.id,
             file: options?.file,
-            dtsOnly: options?.dtsOnly,
+            emitOnlyDtsFiles: options?.emitOnlyDtsFiles,
         });
-        return { emitSkipped: data.emitSkipped, diagnostics: data.diagnostics ?? [], files: data.files ?? [] };
+        return { outputFiles: data.outputFiles ?? [], emitSkipped: data.emitSkipped, diagnostics: data.diagnostics ?? [] };
     }
 }
 
