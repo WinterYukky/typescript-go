@@ -1915,6 +1915,24 @@ export class Checker {
     }
 
     /**
+     * Batched equivalent of calling `getJsDocTagsOfSymbol` and
+     * `getDocumentationCommentOfSymbol` for each symbol: one request returns,
+     * per input symbol (order preserved), exactly what the two individual calls
+     * would return.
+     */
+    async getSymbolDocumentations(symbols: readonly Symbol[]): Promise<{ tags: readonly JSDocTagInfo[]; comment: string; }[]> {
+        if (symbols.length === 0) {
+            return [];
+        }
+        const data = await this.client.apiRequest<({ tags: JSDocTagInfo[] | null; comment: string; } | null)[]>("getSymbolDocumentations", {
+            snapshot: this.snapshotId,
+            project: this.project.id,
+            symbols: symbols.map(s => s.id),
+        });
+        return (data ?? []).map(d => ({ tags: d?.tags ?? [], comment: d?.comment ?? "" }));
+    }
+
+    /**
      * Get the type arguments of a type reference (e.g. the `string` in `Array<string>`).
      */
     async getTypeArguments(type: TypeReference): Promise<readonly Type[]> {

@@ -177,6 +177,8 @@ const (
 	MethodGetMemberInModuleExports          Method = "getMemberInModuleExports"
 	MethodGetJSDocTags                      Method = "getJsDocTags"
 	MethodGetDocumentationComment           Method = "getDocumentationComment"
+	MethodGetSymbolDocumentations           Method = "getSymbolDocumentations"
+	MethodGetSymbolDocumentation            Method = "getSymbolDocumentation"
 	MethodIsArrayType                       Method = "isArrayType"
 	MethodIsTupleType                       Method = "isTupleType"
 
@@ -503,6 +505,8 @@ var unmarshalers = map[Method]func([]byte) (any, error){
 	MethodGetMemberInModuleExports:          unmarshallerFor[GetMemberInModuleExportsParams],
 	MethodGetJSDocTags:                      unmarshallerFor[CheckerSymbolParams],
 	MethodGetDocumentationComment:           unmarshallerFor[CheckerSymbolParams],
+	MethodGetSymbolDocumentations:           unmarshallerFor[CheckerSymbolsParams],
+	MethodGetSymbolDocumentation:            unmarshallerFor[GetSymbolDocumentationParams],
 	MethodIsArrayType:                       unmarshallerFor[CheckerTypeParams],
 	MethodIsTupleType:                       unmarshallerFor[CheckerTypeParams],
 	MethodGetReferencesToSymbolInFile:       unmarshallerFor[GetReferencesToSymbolInFileParams],
@@ -1351,6 +1355,35 @@ type CheckerSymbolParams struct {
 	Snapshot SnapshotID `json:"snapshot"`
 	Project  ProjectID  `json:"project"`
 	Symbol   SymbolID   `json:"symbol"`
+}
+
+// CheckerSymbolsParams is a batched form of CheckerSymbolParams.
+type CheckerSymbolsParams struct {
+	Snapshot SnapshotID `json:"snapshot"`
+	Project  ProjectID  `json:"project"`
+	Symbols  []SymbolID `json:"symbols"`
+}
+
+// SymbolDocumentation carries, for one symbol, exactly what the individual
+// "getJsDocTags" and "getDocumentationComment" methods would return.
+type SymbolDocumentation struct {
+	Tags    []*JSDocTagInfo `json:"tags"`
+	Comment string          `json:"comment"`
+}
+
+// GetSymbolDocumentationParams is the request for the batch "getSymbolDocumentation"
+// method: JSDoc tags + rendered documentation comment for many symbols at once.
+type GetSymbolDocumentationParams struct {
+	Snapshot SnapshotID `json:"snapshot"`
+	Project  ProjectID  `json:"project"`
+	Symbols  []SymbolID `json:"symbols"`
+}
+
+// SymbolDocumentationResponse is one element of the batch "getSymbolDocumentation"
+// response, in input order.
+type SymbolDocumentationResponse struct {
+	Tags                 []*JSDocTagInfo `json:"tags"`
+	DocumentationComment string          `json:"documentationComment"`
 }
 
 // JSDocTagInfo is a single JSDoc tag, mirroring Strada's JSDocTagInfo but with the tag text
