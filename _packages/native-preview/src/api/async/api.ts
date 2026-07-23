@@ -938,6 +938,13 @@ export class Checker {
     private wellKnownSymbols: Promise<{ unknown: number; undefined: number; arguments: number; }> | undefined;
     private wellKnownSignatures: Promise<{ unknown: number; }> | undefined;
 
+    // Input-keyed caches for checker-level type queries: avoid a fresh RPC when
+    // the SAME input (node / symbol+location) is queried again -- the dominant
+    // redundancy at assembly scale (~5.75x observed on aws-cdk-lib). Program is
+    // immutable for a snapshot, so safe within the Checker lifetime; cleared on dispose().
+    private typeAtLocationCache: Map<string, Type> = new Map();
+    private typeOfSymbolAtLocationCache: Map<string, Type> = new Map();
+
     constructor(
         snapshotId: number,
         project: Project,
@@ -952,6 +959,8 @@ export class Checker {
 
     dispose(): void {
         this.objectRegistry.clear();
+        this.typeAtLocationCache.clear();
+        this.typeOfSymbolAtLocationCache.clear();
     }
 
     getSymbolAtLocation(node: Node): Promise<Symbol | undefined>;
@@ -1096,19 +1105,47 @@ export class Checker {
     getTypeAtLocation(nodes: readonly Node[]): Promise<Type[]>;
     async getTypeAtLocation(nodeOrNodes: Node | readonly Node[]): Promise<Type | Type[]> {
         if (Array.isArray(nodeOrNodes)) {
-            const data = await this.client.apiRequest<TypeResponse[]>("getTypeAtLocations", {
-                snapshot: this.snapshotId,
-                project: this.project.id,
-                locations: nodeOrNodes.map(node => getNodeId(node)),
-            });
-            return data.map(d => this.objectRegistry.getOrCreateType(d));
+            const nodes = nodeOrNodes as readonly Node[];
+            const result = new Array<Type>(nodes.length);
+            const missIdx: number[] = [];
+            const missIds: string[] = [];
+            for (let i = 0; i < nodes.length; i++) {
+                const id = getNodeId(nodes[i]);
+                const cached = this.typeAtLocationCache.get(id);
+                if (cached) {
+                    result[i] = cached;
+                } else {
+                    missIdx.push(i);
+                    missIds.push(id);
+                }
+            }
+            if (missIds.length > 0) {
+                const data = await this.client.apiRequest<TypeResponse[]>("getTypeAtLocations", {
+                    snapshot: this.snapshotId,
+                    project: this.project.id,
+                    locations: missIds,
+                });
+                for (let j = 0; j < missIdx.length; j++) {
+                    const t = this.objectRegistry.getOrCreateType(data[j]);
+                    result[missIdx[j]] = t;
+                    this.typeAtLocationCache.set(missIds[j], t);
+                }
+            }
+            return result;
+        }
+        const nodeId = getNodeId(nodeOrNodes as Node);
+        const cached = this.typeAtLocationCache.get(nodeId);
+        if (cached) {
+            return cached;
         }
         const data = await this.client.apiRequest<TypeResponse>("getTypeAtLocation", {
             snapshot: this.snapshotId,
             project: this.project.id,
-            location: getNodeId(nodeOrNodes as Node),
+            location: nodeId,
         });
-        return this.objectRegistry.getOrCreateType(data);
+        const type = this.objectRegistry.getOrCreateType(data);
+        this.typeAtLocationCache.set(nodeId, type);
+        return type;
     }
 
     async getSignaturesOfType(type: Type, kind: SignatureKind): Promise<readonly Signature[]> {
@@ -1282,13 +1319,21 @@ export class Checker {
      * error type (use {@link Type.isErrorType} to detect it).
      */
     async getTypeOfSymbolAtLocation(symbol: Symbol, location: Node): Promise<Type> {
+        const locId = getNodeId(location);
+        const key = `${symbol.id}:${locId}`;
+        const cached = this.typeOfSymbolAtLocationCache.get(key);
+        if (cached) {
+            return cached;
+        }
         const data = await this.client.apiRequest<TypeResponse>("getTypeOfSymbolAtLocation", {
             snapshot: this.snapshotId,
             project: this.project.id,
             symbol: symbol.id,
-            location: getNodeId(location),
+            location: locId,
         });
-        return this.objectRegistry.getOrCreateType(data);
+        const type = this.objectRegistry.getOrCreateType(data);
+        this.typeOfSymbolAtLocationCache.set(key, type);
+        return type;
     }
 
     private async getIntrinsicType(method: string): Promise<Type> {
