@@ -682,6 +682,13 @@ export interface GetEmitOutputOptions {
     file?: DocumentIdentifier;
     /** Emit only declaration outputs. */
     emitOnlyDtsFiles?: boolean;
+    /**
+     * When true, the server writes emitted outputs directly to the program's
+     * file system (classic compiler write path) instead of returning their text.
+     * The returned OutputFile entries then carry only `name` (empty `text`).
+     * Avoids transferring the full emit payload over the RPC channel.
+     */
+    writeToDisk?: boolean;
 }
 
 /** Mirrors the classic compiler's `OutputFile`. */
@@ -925,6 +932,7 @@ export class Program {
             project: this.project.id,
             file: options?.file,
             emitOnlyDtsFiles: options?.emitOnlyDtsFiles,
+            writeToDisk: options?.writeToDisk,
         });
         return { outputFiles: data.outputFiles ?? [], emitSkipped: data.emitSkipped, diagnostics: data.diagnostics ?? [] };
     }
