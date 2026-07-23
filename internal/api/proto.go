@@ -161,6 +161,7 @@ const (
 	MethodGetJSDocTags                      Method = "getJsDocTags"
 	MethodGetDocumentationComment           Method = "getDocumentationComment"
 	MethodGetSymbolDocumentations           Method = "getSymbolDocumentations"
+	MethodGetTypeOfSymbolAtLocations        Method = "getTypeOfSymbolAtLocations"
 	MethodGetSymbolDocumentation            Method = "getSymbolDocumentation"
 	MethodIsArrayType                       Method = "isArrayType"
 	MethodIsTupleType                       Method = "isTupleType"
@@ -470,6 +471,7 @@ var unmarshalers = map[Method]func([]byte) (any, error){
 	MethodGetJSDocTags:                      unmarshallerFor[CheckerSymbolParams],
 	MethodGetDocumentationComment:           unmarshallerFor[CheckerSymbolParams],
 	MethodGetSymbolDocumentations:           unmarshallerFor[CheckerSymbolsParams],
+	MethodGetTypeOfSymbolAtLocations:        unmarshallerFor[CheckerSymbolsAtLocationsParams],
 	MethodGetSymbolDocumentation:            unmarshallerFor[GetSymbolDocumentationParams],
 	MethodIsArrayType:                       unmarshallerFor[CheckerTypeParams],
 	MethodIsTupleType:                       unmarshallerFor[CheckerTypeParams],
@@ -1141,6 +1143,20 @@ type CheckerSymbolsParams struct {
 type SymbolDocumentation struct {
 	Tags    []*JSDocTagInfo `json:"tags"`
 	Comment string          `json:"comment"`
+}
+
+// CheckerSymbolsAtLocationsParams is the batched form of the
+// (symbol, location) pairs accepted by "getTypeOfSymbolAtLocation".
+type CheckerSymbolsAtLocationsParams struct {
+	Snapshot SnapshotID              `json:"snapshot"`
+	Project  ProjectID               `json:"project"`
+	Pairs    []SymbolAtLocationPair  `json:"pairs"`
+}
+
+// SymbolAtLocationPair is one (symbol, location) input pair.
+type SymbolAtLocationPair struct {
+	Symbol   SymbolID   `json:"symbol"`
+	Location NodeHandle `json:"location"`
 }
 
 // GetSymbolDocumentationParams is the request for the batch "getSymbolDocumentation"

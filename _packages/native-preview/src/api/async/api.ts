@@ -1344,6 +1344,46 @@ export class Checker {
         return type;
     }
 
+    /**
+     * Batched equivalent of `getTypeOfSymbolAtLocation` for many (symbol,
+     * location) pairs: one request, per-element semantics identical, order
+     * preserved. Results (and pre-existing cache hits) populate the same
+     * input-keyed cache the individual method uses, so subsequent individual
+     * calls for the same pairs are free.
+     */
+    async getTypeOfSymbolAtLocations(pairs: readonly { symbol: Symbol; location: Node; }[]): Promise<Type[]> {
+        const result = new Array<Type>(pairs.length);
+        const missIdx: number[] = [];
+        const missPairs: { symbol: string; location: string; }[] = [];
+        const missKeys: string[] = [];
+        for (let i = 0; i < pairs.length; i++) {
+            const locId = getNodeId(pairs[i].location);
+            const key = `${pairs[i].symbol.id}:${locId}`;
+            const cached = this.typeOfSymbolAtLocationCache.get(key);
+            if (cached) {
+                result[i] = cached;
+            }
+            else {
+                missIdx.push(i);
+                missPairs.push({ symbol: pairs[i].symbol.id, location: locId });
+                missKeys.push(key);
+            }
+        }
+        if (missPairs.length > 0) {
+            const data = await this.client.apiRequest<TypeResponse[]>("getTypeOfSymbolAtLocations", {
+                snapshot: this.snapshotId,
+                project: this.project.id,
+                pairs: missPairs,
+            });
+            for (let j = 0; j < missIdx.length; j++) {
+                const t = this.objectRegistry.getOrCreateType(data[j]);
+                result[missIdx[j]] = t;
+                this.typeOfSymbolAtLocationCache.set(missKeys[j], t);
+            }
+        }
+        return result;
+    }
+
     private async getIntrinsicType(method: string): Promise<Type> {
         const data = await this.client.apiRequest<TypeResponse>(method, {
             snapshot: this.snapshotId,

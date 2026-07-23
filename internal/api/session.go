@@ -755,6 +755,8 @@ func (s *Session) HandleRequest(ctx context.Context, method string, params json.
 		return s.handleGetDocumentationComment(ctx, parsed.(*CheckerSymbolParams))
 	case string(MethodGetSymbolDocumentations):
 		return s.handleGetSymbolDocumentations(ctx, parsed.(*CheckerSymbolsParams))
+	case string(MethodGetTypeOfSymbolAtLocations):
+		return s.handleGetTypeOfSymbolAtLocations(ctx, parsed.(*CheckerSymbolsAtLocationsParams))
 	case string(MethodIsArrayType):
 		return s.handleIsArrayType(ctx, parsed.(*CheckerTypeParams))
 	case string(MethodIsTupleType):
@@ -2154,6 +2156,31 @@ func (s *Session) handleGetTypeOfSymbolAtLocation(ctx context.Context, params *G
 	}
 
 	return setup.newTypeResponse(setup.checker.GetTypeOfSymbolAtLocation(symbol, node)), nil
+}
+
+// handleGetTypeOfSymbolAtLocations is the batched equivalent of calling
+// "getTypeOfSymbolAtLocation" for each (symbol, location) pair: one checker
+// setup, same per-element semantics and error behaviour, order preserved.
+func (s *Session) handleGetTypeOfSymbolAtLocations(ctx context.Context, params *CheckerSymbolsAtLocationsParams) ([]*TypeResponse, error) {
+	setup, err := s.setupChecker(ctx, params.Snapshot, params.Project)
+	if err != nil {
+		return nil, err
+	}
+	defer setup.done()
+
+	results := make([]*TypeResponse, len(params.Pairs))
+	for i, pair := range params.Pairs {
+		symbol, err := setup.resolveSymbolHandle(pair.Symbol)
+		if err != nil {
+			return nil, err
+		}
+		node, err := setup.sd.resolveNodeHandle(setup.program, pair.Location)
+		if err != nil {
+			return nil, err
+		}
+		results[i] = setup.newTypeResponse(setup.checker.GetTypeOfSymbolAtLocation(symbol, node))
+	}
+	return results, nil
 }
 
 // handleTypeToTypeNode converts a Type to a TypeNode AST and returns it as binary-encoded data.
