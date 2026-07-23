@@ -1176,6 +1176,13 @@ type GetEmitOutputParams struct {
 	Project          ProjectID           `json:"project"`
 	File             *DocumentIdentifier `json:"file,omitempty"`
 	EmitOnlyDtsFiles bool                `json:"emitOnlyDtsFiles,omitempty"`
+	// WriteToDisk, when true, makes the server write emitted outputs directly to
+	// the program's file system (the same path the classic compiler uses) instead
+	// of returning their `text` in the response. The response then carries only
+	// each output's `name`. This avoids transferring the entire emit payload over
+	// the RPC channel (the dominant cost at full-project scale). Backward
+	// compatible: when false (default), behaviour is unchanged.
+	WriteToDisk bool `json:"writeToDisk,omitempty"`
 }
 
 // OutputFileResponse mirrors the classic compiler's OutputFile shape.

@@ -3167,10 +3167,24 @@ func (s *Session) handleGetEmitOutput(ctx context.Context, params *GetEmitOutput
 
 	var mu sync.Mutex
 	var outputFiles []*OutputFileResponse
+	writeToDisk := params.WriteToDisk
+	hostFS := program.Host().FS()
 	result := program.Emit(ctx, compiler.EmitOptions{
 		TargetSourceFile: sourceFile,
 		EmitOnly:         emitOnly,
 		WriteFile: func(fileName string, text string, data *compiler.WriteFileData) error {
+			if writeToDisk {
+				// Write directly to the program's FS (the same path/semantics the
+				// classic compiler uses), and return only the file name — avoiding
+				// transfer of the full emit payload over the RPC channel.
+				if err := hostFS.WriteFile(fileName, text); err != nil {
+					return err
+				}
+				mu.Lock()
+				defer mu.Unlock()
+				outputFiles = append(outputFiles, &OutputFileResponse{Name: fileName})
+				return nil
+			}
 			mu.Lock()
 			defer mu.Unlock()
 			outputFiles = append(outputFiles, &OutputFileResponse{Name: fileName, Text: text})
