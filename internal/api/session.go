@@ -28,6 +28,7 @@ import (
 	"github.com/microsoft/typescript-go/internal/project"
 	"github.com/microsoft/typescript-go/internal/tsoptions"
 	"github.com/microsoft/typescript-go/internal/tspath"
+	"github.com/microsoft/typescript-go/internal/vfs/osvfs"
 )
 
 var sessionIDCounter atomic.Uint64
@@ -3168,7 +3169,10 @@ func (s *Session) handleGetEmitOutput(ctx context.Context, params *GetEmitOutput
 	var mu sync.Mutex
 	var outputFiles []*OutputFileResponse
 	writeToDisk := params.WriteToDisk
-	hostFS := program.Host().FS()
+	// The snapshot's source FS is read-only (WriteFile panics "unimplemented"),
+	// so write emit outputs through the real OS FS -- the same writer the tsgo
+	// CLI uses (ensures parent directories, plain UTF-8, no BOM).
+	diskFS := osvfs.FS()
 	result := program.Emit(ctx, compiler.EmitOptions{
 		TargetSourceFile: sourceFile,
 		EmitOnly:         emitOnly,
@@ -3177,7 +3181,7 @@ func (s *Session) handleGetEmitOutput(ctx context.Context, params *GetEmitOutput
 				// Write directly to the program's FS (the same path/semantics the
 				// classic compiler uses), and return only the file name — avoiding
 				// transfer of the full emit payload over the RPC channel.
-				if err := hostFS.WriteFile(fileName, text); err != nil {
+				if err := diskFS.WriteFile(fileName, text); err != nil {
 					return err
 				}
 				mu.Lock()
